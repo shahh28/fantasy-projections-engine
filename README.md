@@ -1,4 +1,4 @@
-# Fantasy Sports Prediction API with AWS
+# Fantasy Sports Prediction Engine with AWS
 
 A serverless fantasy sports prediction system built with AWS Lambda, S3, and API Gateway. This project scrapes NFL fantasy football data, trains machine learning models, and provides predictions for the upcoming season.
 
