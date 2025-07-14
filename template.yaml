@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Fantasy Sports Prediction API with AWS Lambda, S3, and API Gateway
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 1024
+    Environment:
+      Variables:
+        S3_BUCKET: !Ref FantasyDataBucket
+        MODEL_BUCKET: !Ref ModelBucket
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+
+Resources:
+  # S3 Bucket for storing fantasy data
+  FantasyDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fantasy-sports-data-${AWS::AccountId}-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldData
+            Status: Enabled
+            ExpirationInDays: 365
+
+  # S3 Bucket for storing ML models
+  ModelBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'fantasy-sports-models-${AWS::AccountId}-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Lambda function for data scraping
+  DataScraperFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_functions/data_scraper.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref FantasyDataBucket
+        - S3ReadPolicy:
+            BucketName: !Ref ModelBucket
+      Events:
+        ScrapeData:
+          Type: Api
+          Properties:
+            Path: /scrape-data
+            Method: POST
+        ScheduledScrape:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 6 * * ? *)  # Daily at 6 AM UTC
+            Name: DailyDataScrape
+            Description: Scrape fantasy sports data daily
+      Layers:
+        - !Ref PythonDependenciesLayer
+
+  # Lambda function for model training
+  ModelTrainerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_functions/model_trainer.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref FantasyDataBucket
+        - S3CrudPolicy:
+            BucketName: !Ref ModelBucket
+      Events:
+        TrainModel:
+          Type: Api
+          Properties:
+            Path: /train-model
+            Method: POST
+      Layers:
+        - !Ref PythonDependenciesLayer
+
+  # Lambda function for predictions
+  PredictorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_functions/predictor.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref FantasyDataBucket
+        - S3ReadPolicy:
+            BucketName: !Ref ModelBucket
+      Events:
+        GetPredictions:
+          Type: Api
+          Properties:
+            Path: /predictions
+            Method: GET
+        GetPlayerPrediction:
+          Type: Api
+          Properties:
+            Path: /predictions/{player}
+            Method: GET
+      Layers:
+        - !Ref PythonDependenciesLayer
+
+  # Lambda function for data analysis
+  AnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_functions/analyzer.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref FantasyDataBucket
+        - S3ReadPolicy:
+            BucketName: !Ref ModelBucket
+      Events:
+        GetAnalysis:
+          Type: Api
+          Properties:
+            Path: /analysis
+            Method: GET
+      Layers:
+        - !Ref PythonDependenciesLayer
+
+  # Lambda function for health check
+  HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_functions/health_check.lambda_handler
+      Runtime: python3.9
+      Events:
+        HealthCheck:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: GET
+      Layers:
+        - !Ref PythonDependenciesLayer
+
+  PythonDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: python-dependencies
+      Description: Python dependencies for Lambda functions
+      ContentUri: lambda_layer/
+      CompatibleRuntimes:
+        - python3.9
+      RetentionPolicy: Delete
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  FantasyDataBucket:
+    Description: S3 bucket for fantasy data
+    Value: !Ref FantasyDataBucket
+  ModelBucket:
+    Description: S3 bucket for ML models
+    Value: !Ref ModelBucket 

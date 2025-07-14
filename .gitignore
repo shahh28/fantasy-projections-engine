@@ -1,0 +1,26 @@
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Lambda Layer build artifacts
+lambda_layer/python/lib/
+lambda_layer/python/site-packages/
+lambda_layer/python/*.dist-info/
+lambda_layer/python/*.egg-info/
+
+# SAM build artifacts
+.aws-sam/
+.env
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VSCode settings (optional)
+.vscode/
+
+# Mac/Linux hidden files
+.*~ 
